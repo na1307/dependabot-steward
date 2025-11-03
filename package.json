@@ -20,6 +20,9 @@
     "dependabot",
     "vite"
   ],
+  "engines": {
+    "node": "24.x.x"
+  },
   "type": "module",
   "packageManager": "pnpm@10.20.0",
   "main": "dist/index.js",
@@ -27,6 +30,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "start": "node ./dist/index.js",
     "format": "biome format --write",
     "lint": "biome lint"
   },

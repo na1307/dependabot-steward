@@ -25,5 +25,5 @@
     "noUncheckedSideEffectImports": true,
     "newLine": "lf"
   },
-  "include": ["src"]
+  "include": ["src", "__tests__"]
 }

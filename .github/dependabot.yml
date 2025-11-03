@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "09:00"
+      timezone: Asia/Seoul
+    pull-request-branch-name:
+      separator: _
+    groups:
+      npm-development:
+        dependency-type: development
+      npm-production:
+        dependency-type: production
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: "12:00"
+      timezone: Asia/Seoul
+    pull-request-branch-name:
+      separator: _

@@ -70,8 +70,16 @@ function appFn(app: Probot): void {
 
             pull_number = pr.number // Store the PR number
 
+            const prData = (await octokit.pulls.get({ owner, repo, pull_number })).data
+
+            // Check if the PR was merged
+            if (prData.merged) {
+                console.log('Pull request is already merged.')
+                return false
+            }
+
             // Check if the PR was created by Dependabot (user ID 49699333 is Dependabot's ID)
-            if ((await octokit.pulls.get({ owner, repo, pull_number })).data.user.id !== 49699333) {
+            if (prData.user.id !== 49699333) {
                 console.log('Pull request is not from Dependabot, skipping auto-merge.')
                 return false
             }

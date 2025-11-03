@@ -1,0 +1,45 @@
+{
+  "name": "dependabot-steward",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Dependabot PRs auto merger",
+  "author": "Jonghyo Lee",
+  "license": "MIT",
+  "homepage": "https://github.com/na1307/dependabot-steward",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/na1307/dependabot-steward.git"
+  },
+  "bugs": {
+    "url": "https://github.com/na1307/dependabot-steward/issues"
+  },
+  "keywords": [
+    "probot",
+    "github",
+    "github-app",
+    "dependabot",
+    "vite"
+  ],
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "format": "biome format --write",
+    "lint": "biome lint"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^4.0.0",
+    "@google-cloud/secret-manager": "^6.1.1",
+    "probot": "^14.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.2",
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.12",
+    "vite-plugin-node": "^7.0.0"
+  }
+}

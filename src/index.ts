@@ -8,9 +8,9 @@ const smsc = new SecretManagerServiceClient()
 
 // Retrieve GitHub App credentials from Google Secret Manager
 // These secrets are essential for the Probot app to authenticate with GitHub
-const [APP_ID] = await smsc.accessSecretVersion({name: 'projects/197584535171/secrets/DEPBOT_APP_ID/versions/latest'})
-const [PRIVATE_KEY] = await smsc.accessSecretVersion({name: 'projects/197584535171/secrets/DEPBOT_PRIVATE_KEY/versions/latest'})
-const [WEBHOOK_SECRET] = await smsc.accessSecretVersion({name: 'projects/197584535171/secrets/DEPBOT_WEBHOOK_SECRET/versions/latest'})
+const [APP_ID] = await smsc.accessSecretVersion({ name: 'projects/197584535171/secrets/DEPBOT_APP_ID/versions/latest' })
+const [PRIVATE_KEY] = await smsc.accessSecretVersion({ name: 'projects/197584535171/secrets/DEPBOT_PRIVATE_KEY/versions/latest' })
+const [WEBHOOK_SECRET] = await smsc.accessSecretVersion({ name: 'projects/197584535171/secrets/DEPBOT_WEBHOOK_SECRET/versions/latest' })
 
 // Initialize Probot with the retrieved credentials
 // Probot is a framework for building GitHub Apps
@@ -19,6 +19,9 @@ const probot = new Probot({
     privateKey: PRIVATE_KEY.payload?.data?.toString(),
     secret: WEBHOOK_SECRET.payload?.data?.toString()
 })
+
+const dependabotUserId = 49699333
+const stewardUserId = 241759641
 
 /**
  * The main function for the Probot app.
@@ -70,6 +73,13 @@ function appFn(app: Probot): void {
 
             pull_number = pr.number // Store the PR number
 
+            const prReviewsData = (await octokit.pulls.listReviews({ owner, repo, pull_number })).data
+
+            if (prReviewsData.some(r => r.user?.id === stewardUserId)) {
+                console.log('Pull request is already reviewed.')
+                return false
+            }
+
             const prData = (await octokit.pulls.get({ owner, repo, pull_number })).data
 
             // Check if the PR was merged
@@ -79,7 +89,7 @@ function appFn(app: Probot): void {
             }
 
             // Check if the PR was created by Dependabot (user ID 49699333 is Dependabot's ID)
-            if (prData.user.id !== 49699333) {
+            if (prData.user.id !== dependabotUserId) {
                 console.log('Pull request is not from Dependabot, skipping auto-merge.')
                 return false
             }

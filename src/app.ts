@@ -1,7 +1,68 @@
 import type { Probot } from 'probot'
+import * as yaml from 'yaml'
+import * as z from 'zod'
 
-export const dependabotUserId = 49699333
-export const stewardUserId = 241759641
+/**
+ * Schema for validating the structure of content returned by GitHub API when fetching repository files.
+ * Ensures the content is a file and is base64 encoded.
+ */
+const RepoContentSchema = z.object({
+    type: z.literal(['file', 'dir', 'submodule', 'symlink']),
+    content: z.string(),
+    encoding: z.literal(['base64'])
+})
+
+/**
+ * A list of supported ecosystems by Dependabot. These are used to identify the ecosystem
+ * of a Dependabot PR and to match against the configuration in .steward.yml.
+ */
+const ecosystems = [
+    'bazel',
+    'bun',
+    'bundler',
+    'cargo',
+    'composer',
+    'conda',
+    'devcontainers',
+    'docker',
+    'docker_compose',
+    'dotnet_sdk',
+    'elm',
+    'git_submodules',
+    'github_actions',
+    'go_modules',
+    'gradle',
+    'helm',
+    'hex',
+    'julia',
+    'maven',
+    'npm_and_yarn',
+    'nuget',
+    'pub',
+    'python',
+    'rust_toolchain',
+    'swift',
+    'terraform',
+    'uv',
+    'vcpkg'
+] as const
+
+/**
+ * Defines the structure of the .steward.yml configuration file.
+ * It allows enabling/disabling the Steward app globally or for specific ecosystems.
+ */
+type StewardYml = Readonly<
+    {
+        enable?: boolean
+    } & {
+        [key in (typeof ecosystems)[number]]?: {
+            readonly enable?: boolean | undefined
+        }
+    }
+>
+
+export const dependabotUserId = 49699333 // GitHub ID for the Dependabot bot
+export const stewardUserId = 241759641 // GitHub ID for the Steward bot (this app)
 
 /**
  * The main function for the Probot app.
@@ -77,6 +138,84 @@ export function appFn(app: Probot): void {
             }
 
             const headBranch = pr.head.ref // Head branch of the PR
+            const stewardYmlFileName = '.steward.yml'
+
+            const hasComment = (await octokit.issues.listComments({ owner, repo, issue_number: pull_number })).data.some(
+                c => c.user?.id === stewardUserId
+            )
+
+            try {
+                // Fetch content
+                const stewardYmlData = (await octokit.repos.getContent({ owner, repo, ref: headBranch, path: stewardYmlFileName })).data
+
+                // Parse and validate the fetched content against the RepoContentSchema
+                const parsedStewardYmlContent = RepoContentSchema.parse(stewardYmlData)
+
+                // If .steward.yml is not a file
+                if (parsedStewardYmlContent.type !== 'file') {
+                    context.log.warn(`${stewardYmlFileName} is not a file`)
+                    // Only create a comment if one hasn't been made by Steward yet
+                    if (!hasComment) {
+                        octokit.issues.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: `Configuration invalid: \`${stewardYmlFileName}\` must be a file.`
+                        })
+                    }
+                    return false // Stop processing if it's not a file
+                }
+
+                // Decode the base64 content of .steward.yml and parse it as YAML
+                const stewardYmlString = Buffer.from(z.base64().parse(parsedStewardYmlContent.content.replaceAll('\n', '')), 'base64').toString(
+                    'utf8'
+                )
+
+                const stewardYml: StewardYml = yaml.parse(stewardYmlString)
+
+                // Check if the Steward app is globally disabled in .steward.yml
+                if (stewardYml.enable !== undefined && !stewardYml.enable) {
+                    context.log.info('Steward is disabled.')
+                    return false
+                }
+
+                // Determine the ecosystem based on the head branch name (e.g., dependabot/npm_and_yarn/...)
+                const thisEcosystemString = ecosystems.find(e => headBranch.includes(e))
+
+                // If no ecosystem is identified, something is wrong with the PR branch naming
+                if (!thisEcosystemString) {
+                    throw new Error('Something went wrong')
+                }
+
+                // Get the specific configuration for the identified ecosystem
+                const thisEcosystem = stewardYml[thisEcosystemString]
+
+                // Check if the Steward app is disabled for this specific ecosystem in .steward.yml
+                if (thisEcosystem && thisEcosystem.enable !== undefined && !thisEcosystem.enable) {
+                    context.log.info(`Steward for ${thisEcosystemString} is disabled.`)
+                    return false
+                }
+            } catch (error: any) {
+                if (error.status === 404) {
+                    context.log.info(`${stewardYmlFileName} not found. continuing...`)
+                } else if (error instanceof z.ZodError) {
+                    // Probably dir (Array Returned)
+                    context.log.warn(`${stewardYmlFileName} is not a file`)
+                    if (!hasComment) {
+                        octokit.issues.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: `Configuration invalid: \`${stewardYmlFileName}\` must be a file.`
+                        })
+                    }
+                    return false // Stop processing if it's not a file
+                } else {
+                    context.log.error(error)
+                    return false
+                }
+            }
+
             // Get all check suites for the head branch
             const headSuitesData = (await octokit.checks.listSuitesForRef({ owner, repo, ref: headBranch })).data
 

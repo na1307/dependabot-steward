@@ -26,6 +26,14 @@ describe('Dependabot Steward', () => {
                             allow_merge_commit: true
                         }
                     }),
+                    // Mock getContent to return a default valid .steward.yml
+                    getContent: vi.fn().mockResolvedValue({
+                        data: {
+                            type: 'file',
+                            content: Buffer.from('enable: true').toString('base64'),
+                            encoding: 'base64'
+                        }
+                    }),
                     // Mock branch protection rules, no required checks by default
                     getBranchRules: vi.fn().mockResolvedValue({ data: [] })
                 },
@@ -52,6 +60,10 @@ describe('Dependabot Steward', () => {
                             check_suites: []
                         }
                     })
+                },
+                issues: {
+                    createComment: vi.fn().mockResolvedValue({}),
+                    listComments: vi.fn().mockResolvedValue({ data: [] })
                 }
             },
             request: vi.fn().mockResolvedValue({ data: { check_runs: [] } }) // Mock check runs
@@ -605,6 +617,194 @@ describe('Dependabot Steward', () => {
             await eventHandler(context)
 
             // Assertions: Expect PR to be approved and merged
+            expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalled()
+            expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
+        })
+    })
+
+    // Test suite for .steward.yml configuration
+    describe('with .steward.yml configuration', () => {
+        it('should not merge a pull request if .steward.yml has enable: false', async () => {
+            mockOctokit.rest.repos.getContent.mockResolvedValue({
+                data: {
+                    type: 'file',
+                    content: Buffer.from('enable: false').toString('base64'),
+                    encoding: 'base64'
+                }
+            })
+
+            const event = {
+                name: 'check_suite.completed',
+                id: '123',
+                payload: {
+                    repository: {
+                        owner: { login: 'test-owner' },
+                        name: 'test-repo'
+                    },
+                    check_suite: {
+                        conclusion: 'success',
+                        pull_requests: [
+                            {
+                                number: 1,
+                                base: { ref: 'main', repo: { id: 1 } },
+                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
+                            }
+                        ]
+                    }
+                }
+            }
+
+            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
+        })
+
+        it('should not merge a pull request if the ecosystem is disabled in .steward.yml', async () => {
+            mockOctokit.rest.repos.getContent.mockResolvedValue({
+                data: {
+                    type: 'file',
+                    content: Buffer.from('npm_and_yarn:\n  enable: false').toString('base64'),
+                    encoding: 'base64'
+                }
+            })
+
+            const event = {
+                name: 'check_suite.completed',
+                id: '123',
+                payload: {
+                    repository: {
+                        owner: { login: 'test-owner' },
+                        name: 'test-repo'
+                    },
+                    check_suite: {
+                        conclusion: 'success',
+                        pull_requests: [
+                            {
+                                number: 1,
+                                base: { ref: 'main', repo: { id: 1 } },
+                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
+                            }
+                        ]
+                    }
+                }
+            }
+
+            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
+        })
+
+        it('should create a comment if .steward.yml is not a file', async () => {
+            mockOctokit.rest.repos.getContent.mockResolvedValue({
+                data: {
+                    type: 'dir',
+                    content: '',
+                    encoding: 'base64'
+                }
+            })
+
+            const event = {
+                name: 'check_suite.completed',
+                id: '123',
+                payload: {
+                    repository: {
+                        owner: { login: 'test-owner' },
+                        name: 'test-repo'
+                    },
+                    check_suite: {
+                        conclusion: 'success',
+                        pull_requests: [
+                            {
+                                number: 1,
+                                base: { ref: 'main', repo: { id: 1 } },
+                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
+                            }
+                        ]
+                    }
+                }
+            }
+
+            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+                owner: 'test-owner',
+                repo: 'test-repo',
+                issue_number: 1,
+                body: 'Configuration invalid: `.steward.yml` must be a file.'
+            })
+            expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
+        })
+
+        it('should not create a comment if .steward.yml is not a file but a comment already exists', async () => {
+            mockOctokit.rest.repos.getContent.mockResolvedValue({
+                data: {
+                    type: 'dir',
+                    content: '',
+                    encoding: 'base64'
+                }
+            })
+            mockOctokit.rest.issues.listComments.mockResolvedValue({
+                data: [{ user: { id: stewardUserId }, body: 'Configuration invalid: `.steward.yml` must be a file.' }]
+            })
+
+            const event = {
+                name: 'check_suite.completed',
+                id: '123',
+                payload: {
+                    repository: {
+                        owner: { login: 'test-owner' },
+                        name: 'test-repo'
+                    },
+                    check_suite: {
+                        conclusion: 'success',
+                        pull_requests: [
+                            {
+                                number: 1,
+                                base: { ref: 'main', repo: { id: 1 } },
+                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
+                            }
+                        ]
+                    }
+                }
+            }
+
+            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled()
+            expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
+        })
+
+        it('should merge a pull request if .steward.yml is not found', async () => {
+            mockOctokit.rest.repos.getContent.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }))
+
+            const event = {
+                name: 'check_suite.completed',
+                id: '123',
+                payload: {
+                    repository: {
+                        owner: { login: 'test-owner' },
+                        name: 'test-repo'
+                    },
+                    check_suite: {
+                        conclusion: 'success',
+                        pull_requests: [
+                            {
+                                number: 1,
+                                base: { ref: 'main', repo: { id: 1 } },
+                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
+                            }
+                        ]
+                    }
+                }
+            }
+
+            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            await eventHandler(context)
+
             expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
         })

@@ -14,6 +14,8 @@ Dependabot Steward is a GitHub App built with [Probot](https://probot.github.io/
    # Default: true
    enable: true
 
+   # -- OR --
+
    # Ecosystem name. This must be the ecosystem name defined in the dependabot-core
    # repository (https://github.com/dependabot/dependabot-core), not the ecosystem
    # name defined in dependabot.yml.

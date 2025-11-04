@@ -6,6 +6,69 @@ describe('Dependabot Steward', () => {
     let mockOctokit: any
     let eventHandler: any
 
+    const createMockContext = (
+        pullRequestOverrides?: any,
+        repoContentOverrides?: any,
+        checkSuitesOverrides?: any,
+        issueCommentsOverrides?: any,
+        branchRulesOverrides?: any
+    ) => {
+        const event = {
+            name: 'check_suite.completed',
+            id: '123',
+            payload: {
+                repository: {
+                    owner: {
+                        login: 'test-owner'
+                    },
+                    name: 'test-repo'
+                },
+                check_suite: {
+                    conclusion: 'success',
+                    pull_requests: [
+                        {
+                            number: 1,
+                            base: {
+                                ref: 'main',
+                                repo: {
+                                    id: 1
+                                }
+                            },
+                            head: {
+                                ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
+                                sha: 'test-sha',
+                                repo: {
+                                    id: 1
+                                }
+                            },
+                            ...pullRequestOverrides // Apply PR specific overrides
+                        }
+                    ]
+                },
+                ...checkSuitesOverrides // Apply check suite specific overrides
+            }
+        }
+
+        // Apply specific mocks based on overrides
+        if (repoContentOverrides) {
+            mockOctokit.rest.repos.getContent.mockResolvedValue(repoContentOverrides)
+        }
+        if (issueCommentsOverrides) {
+            mockOctokit.rest.issues.listComments.mockResolvedValue(issueCommentsOverrides)
+        }
+        if (branchRulesOverrides) {
+            mockOctokit.rest.repos.getBranchRules.mockResolvedValue(branchRulesOverrides)
+        }
+
+        const context = {
+            payload: event.payload,
+            octokit: mockOctokit,
+            log: console
+        }
+
+        return { event, context }
+    }
+
     // Setup before each test case
     beforeEach(() => {
         // Mock the Probot app instance
@@ -74,51 +137,12 @@ describe('Dependabot Steward', () => {
     describe('when a check suite has completed', () => {
         // Test case: PR should merge if all conditions are met
         it('should merge a pull request when all checks have passed', async () => {
-            // Define a mock event payload
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
 
-            // Create a mock context object for the event handler
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
+            const { context } = createMockContext()
+            await eventHandler(context)
 
-            await eventHandler(context) // Invoke the event handler
-
-            // Assertions: Expect PR to be approved and merged
             expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
                 owner: 'test-owner',
                 repo: 'test-repo',
@@ -136,7 +160,6 @@ describe('Dependabot Steward', () => {
 
         // Test case: PR should not merge if not from Dependabot
         it('should not merge a pull request if it is not from Dependabot', async () => {
-            // Override mock to simulate a PR from a non-Dependabot user
             mockOctokit.rest.pulls.get.mockResolvedValue({
                 data: {
                     merged: false,
@@ -146,106 +169,30 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'test-branch',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should not merge if it's from a forked repository
         it('should not merge a pull request if it is from a fork', async () => {
-            // Define event payload simulating a PR from a fork
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'test-branch',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 2 // Different repo ID for head, indicating a fork
-                                    }
-                                }
-                            }
-                        ]
+            const { context } = createMockContext({
+                head: {
+                    repo: {
+                        id: 2 // Different repo ID for head, indicating a fork
                     }
                 }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            })
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should not merge if it's already merged
         it('should not merge a pull request if it is already merged', async () => {
-            // Override mock to simulate an already merged PR
             mockOctokit.rest.pulls.get.mockResolvedValue({
                 data: {
                     merged: true, // PR is already merged
@@ -255,56 +202,15 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should not merge if it's already reviewed by the steward
         it('should not merge a pull request if it is already reviewed', async () => {
-            // Override mock to simulate PR already reviewed by the steward
             mockOctokit.rest.pulls.listReviews.mockResolvedValue({
                 data: [
                     {
@@ -315,56 +221,15 @@ describe('Dependabot Steward', () => {
                 ]
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should not merge if some check suites are still in progress
         it('should not merge a pull request if some checks are not completed', async () => {
-            // Override mock to simulate an in-progress check suite
             mockOctokit.rest.checks.listSuitesForRef.mockResolvedValue({
                 data: {
                     total_count: 1,
@@ -377,56 +242,15 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should not merge if required checks have failed
         it('should not merge a pull request if required checks have not passed', async () => {
-            // Override mock to simulate required status checks
             mockOctokit.rest.repos.getBranchRules.mockResolvedValue({
                 data: [
                     {
@@ -442,7 +266,6 @@ describe('Dependabot Steward', () => {
                 ]
             })
 
-            // Override mock to simulate a failed check suite
             mockOctokit.rest.checks.listSuitesForRef.mockResolvedValue({
                 data: {
                     total_count: 1,
@@ -456,56 +279,17 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR not to be approved or merged
             expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         // Test case: PR should merge if there are no check suites configured
         it('should merge a pull request if there are no check suites', async () => {
-            // Override mock to simulate no check suites
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
             mockOctokit.rest.checks.listSuitesForRef.mockResolvedValue({
                 data: {
                     total_count: 0, // No check suites
@@ -513,56 +297,17 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR to be approved and merged
             expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
         })
 
         // Test case: PR should merge if there are check suites but none have check runs
         it('should merge a pull request if there are no valid check suites', async () => {
-            // Override mock to simulate check suites with no check runs
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
             mockOctokit.rest.checks.listSuitesForRef.mockResolvedValue({
                 data: {
                     total_count: 1,
@@ -574,49 +319,9 @@ describe('Dependabot Steward', () => {
                 }
             })
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: {
-                            login: 'test-owner'
-                        },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: {
-                                    ref: 'main',
-                                    repo: {
-                                        id: 1
-                                    }
-                                },
-                                head: {
-                                    ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0',
-                                    sha: 'test-sha',
-                                    repo: {
-                                        id: 1
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = {
-                payload: event.payload,
-                octokit: mockOctokit,
-                log: console
-            }
-
+            const { context } = createMockContext()
             await eventHandler(context)
 
-            // Assertions: Expect PR to be approved and merged
             expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalled()
             expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
         })
@@ -625,108 +330,39 @@ describe('Dependabot Steward', () => {
     // Test suite for .steward.yml configuration
     describe('with .steward.yml configuration', () => {
         it('should not merge a pull request if .steward.yml has enable: false', async () => {
-            mockOctokit.rest.repos.getContent.mockResolvedValue({
+            const { context } = createMockContext(undefined, {
                 data: {
                     type: 'file',
                     content: Buffer.from('enable: false').toString('base64'),
                     encoding: 'base64'
                 }
             })
-
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: { login: 'test-owner' },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: { ref: 'main', repo: { id: 1 } },
-                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = { payload: event.payload, octokit: mockOctokit, log: console }
             await eventHandler(context)
 
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         it('should not merge a pull request if the ecosystem is disabled in .steward.yml', async () => {
-            mockOctokit.rest.repos.getContent.mockResolvedValue({
+            const { context } = createMockContext(undefined, {
                 data: {
                     type: 'file',
                     content: Buffer.from('npm_and_yarn:\n  enable: false').toString('base64'),
                     encoding: 'base64'
                 }
             })
-
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: { login: 'test-owner' },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: { ref: 'main', repo: { id: 1 } },
-                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = { payload: event.payload, octokit: mockOctokit, log: console }
             await eventHandler(context)
 
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         it('should create a comment if .steward.yml is not a file', async () => {
-            mockOctokit.rest.repos.getContent.mockResolvedValue({
+            const { context } = createMockContext(undefined, {
                 data: {
                     type: 'dir',
                     content: '',
                     encoding: 'base64'
                 }
             })
-
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: { login: 'test-owner' },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: { ref: 'main', repo: { id: 1 } },
-                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = { payload: event.payload, octokit: mockOctokit, log: console }
             await eventHandler(context)
 
             expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
@@ -738,74 +374,81 @@ describe('Dependabot Steward', () => {
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
-        it('should not create a comment if .steward.yml is not a file but a comment already exists', async () => {
-            mockOctokit.rest.repos.getContent.mockResolvedValue({
+        it('should create a comment if .steward.yml is invalid', async () => {
+            const { context } = createMockContext(undefined, {
                 data: {
-                    type: 'dir',
-                    content: '',
+                    type: 'file',
+                    content: Buffer.from('enable: "true"').toString('base64'),
                     encoding: 'base64'
                 }
             })
-            mockOctokit.rest.issues.listComments.mockResolvedValue({
-                data: [{ user: { id: stewardUserId }, body: 'Configuration invalid: `.steward.yml` must be a file.' }]
-            })
-
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: { login: 'test-owner' },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: { ref: 'main', repo: { id: 1 } },
-                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = { payload: event.payload, octokit: mockOctokit, log: console }
             await eventHandler(context)
 
-            expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled()
+            expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+                owner: 'test-owner',
+                repo: 'test-repo',
+                issue_number: 1,
+                body: 'Configuration invalid. Please check `.steward.yml`.'
+            })
             expect(mockOctokit.rest.pulls.merge).not.toHaveBeenCalled()
         })
 
         it('should merge a pull request if .steward.yml is not found', async () => {
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
             mockOctokit.rest.repos.getContent.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }))
 
-            const event = {
-                name: 'check_suite.completed',
-                id: '123',
-                payload: {
-                    repository: {
-                        owner: { login: 'test-owner' },
-                        name: 'test-repo'
-                    },
-                    check_suite: {
-                        conclusion: 'success',
-                        pull_requests: [
-                            {
-                                number: 1,
-                                base: { ref: 'main', repo: { id: 1 } },
-                                head: { ref: 'dependabot/npm_and_yarn/test/test-package-1.0.0', sha: 'test-sha', repo: { id: 1 } }
-                            }
-                        ]
-                    }
-                }
-            }
-
-            const context = { payload: event.payload, octokit: mockOctokit, log: console }
+            const { context } = createMockContext()
             await eventHandler(context)
 
             expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalled()
+            expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
+        })
+    })
+
+    describe('with ecosystem-specific .steward.yml configuration', () => {
+        it('should merge a pull request if the ecosystem is explicitly enabled', async () => {
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
+            const { context } = createMockContext(undefined, {
+                data: {
+                    type: 'file',
+                    content: Buffer.from('npm_and_yarn:\n  enable: true').toString('base64'),
+                    encoding: 'base64'
+                }
+            })
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
+        })
+
+        it('should merge a pull request if the ecosystem config is an empty object', async () => {
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
+            const { context } = createMockContext(undefined, {
+                data: {
+                    type: 'file',
+                    content: Buffer.from('npm_and_yarn: {}').toString('base64'),
+                    encoding: 'base64'
+                }
+            })
+            await eventHandler(context)
+
+            expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
+        })
+
+        it('should merge a pull request if a different ecosystem is disabled', async () => {
+            mockOctokit.rest.pulls.createReview.mockResolvedValue({})
+            mockOctokit.rest.pulls.merge.mockResolvedValue({})
+            const { context } = createMockContext(undefined, {
+                data: {
+                    type: 'file',
+                    content: Buffer.from('composer:\n  enable: false').toString('base64'),
+                    encoding: 'base64'
+                }
+            })
+            await eventHandler(context)
+
             expect(mockOctokit.rest.pulls.merge).toHaveBeenCalled()
         })
     })

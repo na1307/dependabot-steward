@@ -7,13 +7,15 @@ updates:
       day: wednesday
       time: "09:00"
       timezone: Asia/Seoul
-    pull-request-branch-name:
-      separator: _
     groups:
       npm-development:
         dependency-type: development
       npm-production:
         dependency-type: production
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: /
@@ -21,5 +23,3 @@ updates:
       interval: monthly
       time: "12:00"
       timezone: Asia/Seoul
-    pull-request-branch-name:
-      separator: _

@@ -39,7 +39,7 @@
   "dependencies": {
     "@google-cloud/functions-framework": "^4.0.0",
     "@google-cloud/secret-manager": "^6.1.1",
-    "probot": "^14.2.1"
+    "probot": "^14.2.4"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.6",

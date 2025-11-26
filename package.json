@@ -37,7 +37,7 @@
     "ci-test": "vitest run"
   },
   "dependencies": {
-    "@google-cloud/functions-framework": "^4.0.0",
+    "@google-cloud/functions-framework": "^4.0.1",
     "@google-cloud/secret-manager": "^6.1.1",
     "probot": "^14.2.4"
   },

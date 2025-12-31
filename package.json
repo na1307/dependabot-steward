@@ -46,7 +46,7 @@
     "@sonar/scan": "^4.3.2",
     "@types/node": "^24.10.4",
     "@vitest/coverage-v8": "^4.0.16",
-    "msw": "^2.12.4",
+    "msw": "^2.12.7",
     "typescript": "~5.9.3",
     "vite": "^7.3.0",
     "vite-plugin-node": "^7.0.0",

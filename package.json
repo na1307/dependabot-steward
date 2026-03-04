@@ -42,9 +42,9 @@
     "probot": "^14.2.4"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.4",
+    "@biomejs/biome": "2.4.5",
     "@sonar/scan": "^4.3.4",
-    "@types/node": "^24.10.13",
+    "@types/node": "^24.11.0",
     "@vitest/coverage-v8": "^4.0.18",
     "msw": "^2.12.10",
     "typescript": "~5.9.3",

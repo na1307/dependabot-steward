@@ -38,8 +38,8 @@
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^5.0.2",
-    "@google-cloud/secret-manager": "^6.1.1",
-    "probot": "^14.2.4"
+    "@google-cloud/secret-manager": "^6.2.0",
+    "probot": "^14.3.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

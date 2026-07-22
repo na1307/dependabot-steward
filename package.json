@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^5.0.5",
-    "@google-cloud/secret-manager": "^6.2.0",
+    "@google-cloud/secret-manager": "^6.3.0",
     "probot": "^14.3.2"
   },
   "devDependencies": {

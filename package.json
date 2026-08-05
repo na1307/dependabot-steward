@@ -42,13 +42,13 @@
     "probot": "^14.3.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
-    "@sonar/scan": "^4.3.8",
+    "@biomejs/biome": "2.5.6",
+    "@sonar/scan": "^5.0.0",
     "@types/node": "^24.13.3",
     "@vitest/coverage-v8": "^4.1.10",
     "msw": "^2.15.0",
     "typescript": "~7.0.2",
-    "vite": "^8.1.4",
+    "vite": "^8.2.0",
     "vite-plugin-node": "^8.0.0",
     "vitest": "^4.1.10"
   }
